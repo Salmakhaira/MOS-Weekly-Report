@@ -17,12 +17,15 @@ import { COLUMNS, MONTHS, WEEKS, computeRow, aggregate, buildHeaderMatrix, fmt }
 const { profile } = await requireSession();
 renderShell(profile, 'view');
 
-const MONTH_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
 const TREND_KEYS = ['total_ol_prtm', 'balance_prtm', 'total_po', 'total_po_outlook'];
 
 const el = {
-  years: document.getElementById('f-years'),
-  months: document.getElementById('f-months'),
+  ddYear: document.getElementById('dd-year'),
+  panelYear: document.getElementById('panel-year'),
+  lblYear: document.getElementById('lbl-year'),
+  ddMonth: document.getElementById('dd-month'),
+  panelMonth: document.getElementById('panel-month'),
+  lblMonth: document.getElementById('lbl-month'),
   week: document.getElementById('f-week'),
   branch: document.getElementById('f-branch'),
   detailWrap: document.getElementById('detail-toggle-wrap'),
@@ -35,6 +38,7 @@ const el = {
 
 const thisYear = new Date().getFullYear();
 const YEAR_RANGE = [thisYear - 2, thisYear - 1, thisYear, thisYear + 1];
+const ALL_MONTHS = MONTHS.map((_, i) => i + 1);
 
 const state = {
   years: new Set([thisYear]),
@@ -45,53 +49,70 @@ const state = {
   isSingle: true,
 };
 
-/* ---------- Pill tahun & bulan (multi-pilih) --------------------------- */
-function renderYearPills() {
-  const allOn = YEAR_RANGE.every(y => state.years.has(y));
-  el.years.innerHTML =
-    `<button type="button" class="all" data-all aria-pressed="${allOn}">Semua</button>` +
-    YEAR_RANGE.map(y =>
-      `<button type="button" data-y="${y}" aria-pressed="${state.years.has(y)}">${y}</button>`).join('');
-
-  el.years.querySelector('[data-all]').addEventListener('click', () => {
-    state.years = allOn ? new Set([thisYear]) : new Set(YEAR_RANGE);
-    renderYearPills(); load();
-  });
-  el.years.querySelectorAll('[data-y]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const y = +btn.dataset.y;
-      if (state.years.has(y)) { if (state.years.size > 1) state.years.delete(y); }
-      else state.years.add(y);
-      renderYearPills(); load();
-    });
-  });
+/* ---------- Checklist Tahun & Bulan (multi-pilih) ----------------------- */
+function updateYearLabel() {
+  const n = state.years.size;
+  el.lblYear.textContent = n === YEAR_RANGE.length ? 'Semua tahun'
+    : n === 1 ? [...state.years][0] : `${n} tahun`;
+}
+function updateMonthLabel() {
+  const n = state.months.size;
+  el.lblMonth.textContent = n === ALL_MONTHS.length ? 'Semua bulan'
+    : n === 1 ? MONTHS[[...state.months][0] - 1] : `${n} bulan`;
 }
 
-function renderMonthPills() {
-  const allOn = state.months.size === 12;
-  el.months.innerHTML =
-    `<button type="button" class="all" data-all aria-pressed="${allOn}">Semua</button>` +
-    MONTH_SHORT.map((m, i) => {
-      const n = i + 1;
-      return `<button type="button" data-m="${n}" aria-pressed="${state.months.has(n)}">${m}</button>`;
-    }).join('');
-
-  el.months.querySelector('[data-all]').addEventListener('click', () => {
-    state.months = allOn ? new Set([new Date().getMonth() + 1]) : new Set(MONTH_SHORT.map((_, i) => i + 1));
-    renderMonthPills(); load();
-  });
-  el.months.querySelectorAll('[data-m]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const m = +btn.dataset.m;
-      if (state.months.has(m)) { if (state.months.size > 1) state.months.delete(m); }
-      else state.months.add(m);
-      renderMonthPills(); load();
+function renderYearPanel() {
+  el.panelYear.innerHTML = `
+    <label class="fd-all"><input type="checkbox" id="cb-year-all"> Semua tahun</label>
+    ${YEAR_RANGE.map(y => `<label><input type="checkbox" value="${y}" ${state.years.has(y) ? 'checked' : ''}> ${y}</label>`).join('')}
+  `;
+  el.panelYear.querySelector('#cb-year-all').checked = state.years.size === YEAR_RANGE.length;
+  el.panelYear.querySelectorAll('input[type=checkbox]:not(#cb-year-all)').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const y = +cb.value;
+      if (cb.checked) state.years.add(y);
+      else if (state.years.size > 1) state.years.delete(y);
+      else cb.checked = true;
+      el.panelYear.querySelector('#cb-year-all').checked = state.years.size === YEAR_RANGE.length;
+      updateYearLabel();
+      load();
     });
   });
+  el.panelYear.querySelector('#cb-year-all').addEventListener('change', (e) => {
+    state.years = new Set(e.target.checked ? YEAR_RANGE : [thisYear]);
+    renderYearPanel();
+    load();
+  });
+  updateYearLabel();
 }
 
-renderYearPills();
-renderMonthPills();
+function renderMonthPanel() {
+  el.panelMonth.innerHTML = `
+    <label class="fd-all"><input type="checkbox" id="cb-month-all"> Semua bulan</label>
+    ${ALL_MONTHS.map(m => `<label><input type="checkbox" value="${m}" ${state.months.has(m) ? 'checked' : ''}> ${MONTHS[m - 1]}</label>`).join('')}
+  `;
+  el.panelMonth.querySelector('#cb-month-all').checked = state.months.size === ALL_MONTHS.length;
+  el.panelMonth.querySelectorAll('input[type=checkbox]:not(#cb-month-all)').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const m = +cb.value;
+      if (cb.checked) state.months.add(m);
+      else if (state.months.size > 1) state.months.delete(m);
+      else cb.checked = true;
+      el.panelMonth.querySelector('#cb-month-all').checked = state.months.size === ALL_MONTHS.length;
+      updateMonthLabel();
+      load();
+    });
+  });
+  el.panelMonth.querySelector('#cb-month-all').addEventListener('change', (e) => {
+    state.months = new Set(e.target.checked ? ALL_MONTHS : [new Date().getMonth() + 1]);
+    renderMonthPanel();
+    load();
+  });
+  updateMonthLabel();
+}
+
+renderYearPanel();
+renderMonthPanel();
 el.week.innerHTML = WEEKS.map(w =>
   `<button type="button" data-week="${w}" aria-pressed="${w === state.week}">W${w}</button>`).join('');
 el.lblWeek.textContent = state.week;
