@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Input Data · Weekly Report MOS</title>
+<title>Input Data · Weekly Report MOS (Upload)</title>
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -12,22 +12,18 @@
 <main class="wrap">
   <div class="page-head">
     <p class="eyebrow">Input Data</p>
-    <h1>Isi laporan cabang</h1>
-    <p>Klik nama salesman untuk membuka isiannya. Hanya satu yang terbuka pada satu waktu, supaya tidak salah taruh angka.</p>
+    <h1>Upload laporan cabang</h1>
+    <p>Unggah file Excel cabang Anda (format sama seperti file bulanan yang biasa dipakai). Sistem akan membaca isinya otomatis dan menampilkan ringkasannya di bawah.</p>
   </div>
 
   <div class="toolbar">
     <div class="field">
-      <label for="f-year">Tahun</label>
+      <label for="f-year">Tahun periode</label>
       <select id="f-year"></select>
     </div>
-    <div class="field">
-      <label for="f-month">Bulan</label>
+    <div class="field grow">
+      <label for="f-month">Bulan periode</label>
       <select id="f-month"></select>
-    </div>
-    <div class="field">
-      <label>Minggu berjalan</label>
-      <div class="weekpick" id="f-week" role="group" aria-label="Pilih minggu"></div>
     </div>
     <div class="field grow">
       <label for="f-branch">Cabang</label>
@@ -37,11 +33,21 @@
 
   <div id="note" class="note"></div>
 
-  <div id="periodband" class="periodband"></div>
-
-  <div id="acctable" class="acctable">
-    <div class="skeleton">Memuat data…</div>
+  <div id="dropzone" class="dropzone">
+    <div class="icon">⬆</div>
+    <div class="main">Klik untuk pilih file, atau seret file Excel ke sini</div>
+    <div class="sub">Format .xlsx — sheet di dalamnya harus bernama sesuai bulan &amp; tahun yang dipilih di atas, misal "AGUSTUS 2026"</div>
+    <div class="filename" id="filename"></div>
+    <input type="file" id="f-file" accept=".xlsx" style="display:none">
   </div>
+
+  <div class="formbar" style="margin-top:16px">
+    <button id="btn-process" disabled>Proses &amp; Simpan</button>
+    <button class="ghost" id="btn-clear">Batal / Pilih file lain</button>
+    <span class="hint" id="status"></span>
+  </div>
+
+  <div id="summary"></div>
 </main>
 
 <script type="module" src="assets/input.js"></script>
