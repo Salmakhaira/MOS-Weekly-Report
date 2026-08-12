@@ -14,7 +14,6 @@ export const MONTHS = [
 
 export const WEEKS = [1, 2, 3, 4];
 
-const LQ = 'LIVE QUOTATION by CRM';
 const OP = 'OUTLOOK PRTM';
 const ORT = 'OUTLOOK REVENUE TM';
 const ORTA = 'OUTLOOK REVENUE TM ADDITIONAL';
@@ -23,19 +22,7 @@ const BO = 'BACK ORDER & ETA NM';
 
 /* Setiap entri: [kolomExcel, key, path[], flags] */
 export const COLUMNS = [
-  // --- D..AK : bagian yang diisi lewat form -----------------------------
-  { col: 'D',  key: 'market_size_year',   path: ['MARKET SIZE/YEAR'],   input: true },
-  { col: 'E',  key: 'market_size_month',  path: ['MARKET SIZE/MONTH'],  input: true },
-
-  { col: 'F',  key: 'lq_tm_w1', path: [LQ, 'TM W1'], input: true, week: 1 },
-  { col: 'G',  key: 'lq_tm_w2', path: [LQ, 'TM W2'], input: true, week: 2 },
-  { col: 'H',  key: 'lq_tm_w3', path: [LQ, 'TM W3'], input: true, week: 3 },
-  { col: 'I',  key: 'lq_tm_w4', path: [LQ, 'TM W4'], input: true, week: 4 },
-  { col: 'J',  key: 'lq_lm',    path: [LQ, 'LM'],    input: true },
-  { col: 'K',  key: 'lq_total', path: [LQ, 'TOTAL'], calc: true },
-
-  { col: 'L',  key: 'ms_teams_schedule', path: ['MS TEAMS SCHEDULE'], input: true, type: 'text' },
-  { col: 'M',  key: 'kemampuan_po',      path: ['KEMAMPUAN UNTUK MEMENUHI PO DARI QUOT 80%, 50-80%'], input: true, type: 'text' },
+  // --- N..AK : bagian yang diisi lewat form -----------------------------
   { col: 'N',  key: 'plan_sales_master', path: ['PLAN SALES MASTER'], input: true },
 
   { col: 'O',  key: 'act_prtm_w1', path: [OP, 'ACT PRTM by SO SAP W1'], input: true, week: 1 },
@@ -127,12 +114,10 @@ const num = v => (typeof v === 'number' ? v : parseFloat(v)) || 0;
  */
 export function computeRow(r, week) {
   const w = WEEKS.includes(Number(week)) ? Number(week) : 1;
-  const tm    = num(r[`lq_tm_w${w}`]);
   const act   = num(r[`act_prtm_w${w}`]);
   const qc80  = num(r[`qc_w${w}_gt80`]);
   const o = { ...r };
 
-  o.lq_total         = tm + num(r.lq_lm);                          // K = TM Wn + LM
   o.total_ol_prtm    = act + qc80 + num(r.po_non_sap);             // AF
   o.balance_prtm     = o.total_ol_prtm - num(r.ol_min_prtm);       // AH = AF - AG
   o.total_po         = act + num(r.po_last_month);                 // AJ
