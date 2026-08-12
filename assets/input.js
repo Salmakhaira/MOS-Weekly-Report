@@ -36,11 +36,11 @@ const isAdmin = profile.role === 'admin';
 const COL = new Map(COLUMNS.map(c => [c.key, c]));
 
 /* Kolom yang ditampilkan di ringkasan/pratinjau: isian D..AK + hasil hitung. */
-const CALC_IN_FORM = ['lq_total', 'total_ol_prtm', 'balance_prtm', 'total_po', 'total_po_outlook'];
+const CALC_IN_FORM = ['total_ol_prtm', 'balance_prtm', 'total_po', 'total_po_outlook'];
 const PREVIEW_COLUMNS = COLUMNS.filter(c => c.input || CALC_IN_FORM.includes(c.key));
 
 /* Kolom mana yang termasuk "milik minggu ke-N". */
-const weekFieldKeys = (w) => [`lq_tm_w${w}`, `act_prtm_w${w}`, `qc_w${w}_gt80`, `qc_w${w}_50_80`, `qc_w${w}_lt50`];
+const weekFieldKeys = (w) => [`act_prtm_w${w}`, `qc_w${w}_gt80`, `qc_w${w}_50_80`, `qc_w${w}_lt50`];
 const ALL_WEEK_KEYS = new Set(WEEKS.flatMap(weekFieldKeys));
 const MONTH_LEVEL_KEYS = new Set(STORED.filter(c => !ALL_WEEK_KEYS.has(c.key)).map(c => c.key));
 
