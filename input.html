@@ -13,7 +13,7 @@
   <div class="page-head">
     <p class="eyebrow">Input Data</p>
     <h1>Upload laporan cabang</h1>
-    <p>Unggah file Excel cabang Anda (format sama seperti file bulanan yang biasa dipakai). Sistem akan membaca isinya otomatis dan menampilkan ringkasannya di bawah.</p>
+    <p>Unggah file Excel cabang Anda setiap minggu. Pilih minggu yang mau disubmit, lalu unggah file — sistem hanya membaca kolom minggu itu dari file Anda. Begitu satu minggu disubmit, minggu itu terkunci dan tidak bisa diunggah ulang (kecuali oleh admin head office).</p>
   </div>
 
   <div class="toolbar">
@@ -24,6 +24,10 @@
     <div class="field grow">
       <label for="f-month">Bulan periode</label>
       <select id="f-month"></select>
+    </div>
+    <div class="field">
+      <label>Minggu yang disubmit</label>
+      <div class="weekpick" id="f-week" role="group" aria-label="Pilih minggu"></div>
     </div>
     <div class="field grow">
       <label for="f-branch">Cabang</label>
@@ -36,7 +40,7 @@
   <div id="dropzone" class="dropzone">
     <div class="icon">⬆</div>
     <div class="main">Klik untuk pilih file, atau seret file Excel ke sini</div>
-    <div class="sub">Format .xlsx — sheet di dalamnya harus bernama sesuai bulan &amp; tahun yang dipilih di atas, misal "AGUSTUS 2026"</div>
+    <div class="sub">Format .xlsx — sheet di dalamnya harus bernama sesuai bulan &amp; tahun di atas (misal "AGUSTUS 2026"). Hanya kolom minggu yang dipilih di atas yang akan dibaca &amp; disimpan.</div>
     <div class="filename" id="filename"></div>
     <input type="file" id="f-file" accept=".xlsx" style="display:none">
   </div>
