@@ -15,4 +15,4 @@ export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 
 /* Judul yang tampil di header. Ubah sesuai nama perusahaan. */
 export const APP_NAME = 'Weekly Report MOS';
-export const APP_SUB  = 'Nasional';
+export const APP_SUB  = 'Upload';
