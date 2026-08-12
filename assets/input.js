@@ -1,24 +1,33 @@
 /* =====================================================================
-   input.js (versi Upload) — ketua cabang unggah file Excel bulanan,
-   sistem membaca isinya otomatis, menyimpan ke database yang sama
-   dengan versi form, lalu menampilkan ringkasan di halaman ini.
+   input.js (versi Upload) — ketua cabang unggah file Excel SETIAP
+   MINGGU (bukan sekali per bulan). Sistem hanya membaca kolom minggu
+   yang dipilih dari file, menyimpan ke database yang sama dengan
+   versi form, lalu menampilkan ringkasan di halaman ini.
+
+   Begitu satu minggu untuk satu salesman berhasil disimpan, minggu itu
+   otomatis terkunci (w{n}_submitted = true) — tidak bisa diunggah ulang
+   oleh cabang, hanya admin head office yang bisa mengubahnya. Penguncian
+   sesungguhnya terjadi di database (trigger enforce_week_lock, lihat
+   supabase/04_week_submission_lock.sql); pengecekan di sini cuma supaya
+   ketua cabang dapat pesan yang jelas SEBELUM mengunggah, bukan baru
+   gagal di tengah proses.
 
    Cara membaca file:
    1. Cari sheet yang namanya cocok dengan "BULAN TAHUN" (mis. "AGUSTUS
-      2026") sesuai periode yang dipilih di atas — persis pola nama
-      sheet di file bulanan yang sudah biasa dipakai.
-   2. Baris SALESMAN dicari dengan mencocokkan teks di kolom C terhadap
-      daftar nama salesman yang sudah terdaftar untuk cabang itu di
-      database — bukan menebak nomor baris, supaya tetap jalan walau
-      urutan barisnya sedikit berbeda antar cabang.
-   3. Baris total cabang (yang isinya rumus SUM) otomatis terlewat
-      karena namanya tidak akan cocok dengan nama salesman mana pun.
-   4. Kolom D sampai AK dibaca sesuai huruf kolom yang sama dengan yang
-      dipakai di assets/schema.js.
+      2026") — sama seperti sebelumnya.
+   2. Cocokkan nama di kolom C terhadap daftar salesman cabang di database.
+   3. HANYA kolom minggu yang dipilih di atas yang dibaca & disimpan
+      (mis. pilih W2 -> hanya kolom TM W2, Act PRTM W2, Quot Confidence
+      W2 yang diambil dari file). Minggu lain yang sudah tersimpan
+      sebelumnya tidak disentuh.
+   4. Field yang bukan per-minggu (Market Size, Plan Sales Master, MS
+      Teams Schedule, Kemampuan PO, PO Non SAP, OL Min PRTM, PO Bulan
+      Lalu) selalu disegarkan dari file, karena field itu tidak
+      dikunci per-minggu.
    ===================================================================== */
 
 import { sb, requireSession, renderShell, showNote, escapeHtml } from './app.js';
-import { COLUMNS, MONTHS, STORED, computeRow, buildHeaderMatrix, fmt } from './schema.js';
+import { COLUMNS, MONTHS, WEEKS, STORED, computeRow, buildHeaderMatrix, fmt } from './schema.js';
 
 const { profile } = await requireSession();
 renderShell(profile, 'input');
@@ -26,13 +35,19 @@ renderShell(profile, 'input');
 const isAdmin = profile.role === 'admin';
 const COL = new Map(COLUMNS.map(c => [c.key, c]));
 
-/* Kolom yang ditampilkan di ringkasan: isian D..AK + hasil hitung dari blok itu. */
+/* Kolom yang ditampilkan di ringkasan/pratinjau: isian D..AK + hasil hitung. */
 const CALC_IN_FORM = ['lq_total', 'total_ol_prtm', 'balance_prtm', 'total_po', 'total_po_outlook'];
 const PREVIEW_COLUMNS = COLUMNS.filter(c => c.input || CALC_IN_FORM.includes(c.key));
+
+/* Kolom mana yang termasuk "milik minggu ke-N". */
+const weekFieldKeys = (w) => [`lq_tm_w${w}`, `act_prtm_w${w}`, `qc_w${w}_gt80`, `qc_w${w}_50_80`, `qc_w${w}_lt50`];
+const ALL_WEEK_KEYS = new Set(WEEKS.flatMap(weekFieldKeys));
+const MONTH_LEVEL_KEYS = new Set(STORED.filter(c => !ALL_WEEK_KEYS.has(c.key)).map(c => c.key));
 
 const el = {
   year: document.getElementById('f-year'),
   month: document.getElementById('f-month'),
+  week: document.getElementById('f-week'),
   branch: document.getElementById('f-branch'),
   drop: document.getElementById('dropzone'),
   fileInput: document.getElementById('f-file'),
@@ -47,19 +62,28 @@ const now = new Date();
 const state = {
   year: now.getFullYear(),
   month: now.getMonth() + 1,
+  week: Math.min(4, Math.ceil(now.getDate() / 7)),
   branchId: null,
   branchName: '',
   file: null,
   previewWeek: 1,
 };
 
-/* ---------- Pemilih periode & cabang ----------------------------------- */
+/* ---------- Pemilih periode, minggu & cabang ---------------------------- */
 const thisYear = now.getFullYear();
 for (let y = thisYear - 2; y <= thisYear + 1; y++) {
   el.year.insertAdjacentHTML('beforeend', `<option value="${y}"${y === state.year ? ' selected' : ''}>${y}</option>`);
 }
 MONTHS.forEach((m, i) => el.month.insertAdjacentHTML('beforeend',
   `<option value="${i + 1}"${i + 1 === state.month ? ' selected' : ''}>${m}</option>`));
+el.week.innerHTML = WEEKS.map(w =>
+  `<button type="button" data-week="${w}" aria-pressed="${w === state.week}">W${w}</button>`).join('');
+el.week.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-week]');
+  if (!b) return;
+  state.week = +b.dataset.week;
+  [...el.week.children].forEach(x => x.setAttribute('aria-pressed', x === b));
+});
 
 const { data: branches, error: brErr } = await sb
   .from('branches').select('id, code, name, area_code')
@@ -128,6 +152,13 @@ function normalize(s) { return String(s ?? '').trim().toUpperCase().replace(/\s+
 function toNum(v) { return typeof v === 'number' ? v : (parseFloat(v) || 0); }
 
 async function processFile() {
+  if (!isAdmin) {
+    const proceed = confirm(
+      `Setelah diproses, data minggu ${state.week} untuk cabang ${state.branchName} akan terkunci — ` +
+      `tidak bisa diunggah ulang kecuali oleh admin head office. Lanjutkan?`);
+    if (!proceed) return;
+  }
+
   el.btnProcess.disabled = true;
   el.status.textContent = 'Membaca file…';
   showNote('note', '');
@@ -158,31 +189,56 @@ async function processFile() {
     const nameCol = colIdx('C');
 
     el.status.textContent = 'Mencocokkan data salesman…';
-    const { data: salesmen, error: e1 } = await sb
-      .from('salesmen').select('id, name, sort_order')
-      .eq('branch_id', state.branchId).eq('is_active', true).order('sort_order');
+    const [{ data: salesmen, error: e1 }, { data: existing, error: e0 }] = await Promise.all([
+      sb.from('salesmen').select('id, name, sort_order')
+        .eq('branch_id', state.branchId).eq('is_active', true).order('sort_order'),
+      sb.from('mos_entries').select('*')
+        .eq('branch_id', state.branchId)
+        .eq('period_year', state.year).eq('period_month', state.month),
+    ]);
     if (e1) throw e1;
+    if (e0) throw e0;
+
+    const existingByS = new Map((existing ?? []).map(r => [r.salesman_id, r]));
+    const w = state.week;
+    const weekKeys = new Set(weekFieldKeys(w));
 
     const matched = [];
+    const locked = [];
     const unmatched = [];
+
     for (const s of (salesmen ?? [])) {
       const rowIdx = rows.findIndex(r => normalize(r?.[nameCol]) === normalize(s.name));
       if (rowIdx === -1) { unmatched.push(s); continue; }
-      const raw = { salesman_id: s.id, branch_id: state.branchId,
-                    period_year: state.year, period_month: state.month };
+
+      const prior = existingByS.get(s.id) ?? {};
+      if (!isAdmin && prior[`w${w}_submitted`]) { locked.push(s); continue; }
+
+      const out = { period_year: state.year, period_month: state.month,
+                    branch_id: state.branchId, salesman_id: s.id };
+      if (prior.id) out.id = prior.id;
+
       for (const c of STORED) {
-        const v = rows[rowIdx][colIdx(c.col)];
-        raw[c.key] = c.type === 'text' ? String(v ?? '').trim() : toNum(v);
+        if (weekKeys.has(c.key) || MONTH_LEVEL_KEYS.has(c.key)) {
+          const v = rows[rowIdx][colIdx(c.col)];
+          out[c.key] = c.type === 'text' ? String(v ?? '').trim() : toNum(v);
+        } else {
+          // Kolom minggu lain: jangan sentuh, pertahankan nilai yang sudah tersimpan.
+          out[c.key] = c.type === 'text' ? (prior[c.key] ?? '') : (Number(prior[c.key]) || 0);
+        }
       }
-      matched.push({ salesman: s, row: raw });
+      out[`w${w}_submitted`] = true;
+
+      matched.push({ salesman: s, row: out });
     }
 
     if (!matched.length) {
       el.status.textContent = '';
       el.btnProcess.disabled = false;
-      showNote('note',
-        'Tidak ada satu pun nama salesman di file ini yang cocok dengan daftar salesman ' +
-        `cabang ${state.branchName} di sistem. Periksa penulisan nama di kolom C sheet "${sheetName}".`, 'err');
+      const reason = locked.length && !unmatched.length
+        ? `Semua salesman cabang ${state.branchName} sudah pernah submit minggu ${w}.`
+        : `Tidak ada nama salesman di file ini yang cocok dengan daftar salesman cabang ${state.branchName}.`;
+      showNote('note', reason + ` Periksa penulisan nama di kolom C sheet "${sheetName}".`, 'err');
       return;
     }
 
@@ -204,9 +260,12 @@ async function processFile() {
     }
 
     el.status.textContent = 'Tersimpan ' + new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
-    showNote('note', `Berhasil: ${matched.length} dari ${(salesmen ?? []).length} salesman terbaca dari sheet "${sheetName}" dan tersimpan.`, 'ok');
-    state.previewWeek = guessWeek(matched);
-    renderSummary(sheetName, matched, unmatched);
+    showNote('note',
+      `Berhasil: ${matched.length} salesman untuk minggu ${w} tersimpan dari sheet "${sheetName}".` +
+      (locked.length ? ` ${locked.length} salesman dilewati karena minggu ${w} sudah pernah disubmit.` : ''),
+      'ok');
+    state.previewWeek = w;
+    renderSummary(sheetName, matched, locked, unmatched);
   } catch (err) {
     el.status.textContent = '';
     showNote('note', 'Gagal memproses file: ' + (err.message || err), 'err');
@@ -215,20 +274,11 @@ async function processFile() {
   }
 }
 
-/** Tebak minggu mana yang paling relevan ditampilkan, berdasar kolom mana yang terisi. */
-function guessWeek(matched) {
-  for (let w = 4; w >= 1; w--) {
-    const filled = matched.some(m =>
-      Number(m.row[`lq_tm_w${w}`]) > 0 || Number(m.row[`act_prtm_w${w}`]) > 0);
-    if (filled) return w;
-  }
-  return 1;
-}
-
 /* ---------- Ringkasan ----------------------------------------------------- */
-function renderSummary(sheetName, matched, unmatched) {
+function renderSummary(sheetName, matched, locked, unmatched) {
   const listHtml = [
-    ...matched.map(m => `<li class="ok">✓ ${escapeHtml(m.salesman.name)} — terbaca &amp; tersimpan</li>`),
+    ...matched.map(m => `<li class="ok">✓ ${escapeHtml(m.salesman.name)} — minggu ${state.week} tersimpan &amp; terkunci</li>`),
+    ...locked.map(s => `<li class="warn">🔒 ${escapeHtml(s.name)} — minggu ${state.week} sudah pernah disubmit, dilewati</li>`),
     ...unmatched.map(s => `<li class="warn">! ${escapeHtml(s.name)} — tidak ditemukan di sheet, dilewati</li>`),
   ].join('');
 
@@ -237,13 +287,13 @@ function renderSummary(sheetName, matched, unmatched) {
       <p class="subhead" style="margin-top:0">Ringkasan dari sheet "${escapeHtml(sheetName)}"</p>
       <ul class="matchlist">${listHtml}</ul>
 
-      <p class="subhead">Pratinjau data tersimpan</p>
+      <p class="subhead">Pratinjau data tersimpan (semua minggu, termasuk yang sebelumnya)</p>
       <div class="weekpick" id="preview-week" style="margin-bottom:12px"></div>
       <div class="tablewrap" id="preview-table"></div>
     </div>`;
 
   const wpick = document.getElementById('preview-week');
-  wpick.innerHTML = [1, 2, 3, 4].map(w =>
+  wpick.innerHTML = WEEKS.map(w =>
     `<button type="button" data-week="${w}" aria-pressed="${w === state.previewWeek}">W${w}</button>`).join('');
   wpick.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-week]');
