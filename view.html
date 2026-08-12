@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>View Data · Weekly Report MOS</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div id="shell"></div>
+
+<main class="wrap-wide">
+  <div class="page-head">
+    <p class="eyebrow">View Data</p>
+    <h1>Weekly Report MOS Nasional</h1>
+    <p>Rekap otomatis dari isian seluruh cabang. Baris cabang, area, dan total dihitung langsung dari data salesman.</p>
+  </div>
+
+  <div class="toolbar">
+    <div class="field">
+      <label>Tahun</label>
+      <div class="pillgroup" id="f-years"></div>
+    </div>
+    <div class="field grow">
+      <label>Bulan</label>
+      <div class="pillgroup" id="f-months"></div>
+    </div>
+    <div class="field">
+      <label>Minggu berjalan</label>
+      <div class="weekpick" id="f-week" role="group" aria-label="Pilih minggu"></div>
+    </div>
+    <div class="field grow">
+      <label for="f-branch">Tampilkan</label>
+      <select id="f-branch"><option value="">Semua cabang</option></select>
+    </div>
+    <div class="field" id="detail-toggle-wrap">
+      <label for="f-detail" style="display:flex;gap:7px;align-items:center;cursor:pointer">
+        <input type="checkbox" id="f-detail" checked style="width:auto;margin:0">
+        Rincian salesman
+      </label>
+    </div>
+    <button class="ghost" id="btn-export">Unduh Excel</button>
+  </div>
+
+  <div id="note" class="note"></div>
+
+  <div class="tablewrap" id="tablewrap">
+    <div class="skeleton">Memuat data…</div>
+  </div>
+
+  <div class="legend" id="legend-detail">
+    <span><i style="background:#eff4f2;border:1px solid #dbe2de"></i>Baris cabang</span>
+    <span><i style="background:#dfe8e5"></i>Subtotal area</span>
+    <span><i style="background:#12211f"></i>Total nasional</span>
+    <span><i style="background:#0f6e64"></i>Grand total</span>
+    <span>Kolom bertanda <b style="color:#0f6e64">W<span id="lbl-week">1</span></b> adalah minggu yang dipakai rumus berjalan.</span>
+  </div>
+</main>
+
+<script type="module" src="assets/view.js"></script>
+</body>
+</html>

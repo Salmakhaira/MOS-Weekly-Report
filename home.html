@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home · Weekly Report MOS</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div id="shell"></div>
+
+<main class="wrap">
+  <div class="page-head">
+    <p class="eyebrow">Beranda</p>
+    <h1 id="greeting">Selamat datang</h1>
+    <p id="scope-line"></p>
+  </div>
+
+  <div class="menu-grid">
+    <a class="menu-card" href="input.html">
+      <span class="step">01 — SETIAP MINGGU</span>
+      <h3>Input Data</h3>
+      <p>Isi angka laporan per salesman untuk periode berjalan. Baris total cabang dihitung otomatis.</p>
+    </a>
+    <a class="menu-card" href="view.html">
+      <span class="step">02 — KAPAN SAJA</span>
+      <h3>View Data</h3>
+      <p>Rekap nasional seluruh cabang dalam format yang sama dengan Weekly Report, siap diunduh ke Excel.</p>
+    </a>
+  </div>
+
+  <div class="card" style="margin-top:24px">
+    <p class="subhead" style="margin-top:0">Ringkasan periode berjalan</p>
+    <div id="summary" class="skeleton">Memuat…</div>
+  </div>
+</main>
+
+<script type="module">
+import { sb, requireSession, renderShell, escapeHtml, defaultPeriod } from './assets/app.js';
+import { MONTHS } from './assets/schema.js';
+
+const { profile } = await requireSession();
+renderShell(profile, 'home');
+
+document.getElementById('greeting').textContent =
+  'Halo, ' + (profile.full_name || profile.email).split(' ')[0];
+
+document.getElementById('scope-line').textContent = profile.role === 'admin'
+  ? 'Anda admin head office: bisa mengisi dan mengubah data seluruh cabang.'
+  : `Anda bisa mengisi data untuk cabang ${profile.branches?.name ?? '—'}, dan melihat data seluruh cabang.`;
+
+// Berapa cabang yang sudah menyetor data bulan ini
+const p = defaultPeriod();
+const [{ count: totalBranches }, { data: entries }] = await Promise.all([
+  sb.from('branches').select('id', { count: 'exact', head: true }).eq('is_active', true),
+  sb.from('mos_entries').select('branch_id, updated_at')
+    .eq('period_year', p.year).eq('period_month', p.month),
+]);
+
+const filled = new Set((entries ?? []).map(e => e.branch_id));
+const last = (entries ?? []).map(e => e.updated_at).sort().pop();
+
+document.getElementById('summary').className = '';
+document.getElementById('summary').innerHTML = `
+  <div class="row">
+    <div class="calcbox"><span>Periode</span><b>${MONTHS[p.month - 1]} ${p.year}</b></div>
+    <div class="calcbox"><span>Cabang sudah mengisi</span><b>${filled.size} / ${totalBranches ?? 0}</b></div>
+    <div class="calcbox"><span>Pembaruan terakhir</span><b>${
+      last ? new Date(last).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : 'belum ada'
+    }</b></div>
+  </div>`;
+</script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Input Data · Weekly Report MOS</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div id="shell"></div>
+
+<main class="wrap">
+  <div class="page-head">
+    <p class="eyebrow">Input Data</p>
+    <h1>Isi laporan cabang</h1>
+    <p>Klik nama salesman untuk membuka isiannya. Hanya satu yang terbuka pada satu waktu, supaya tidak salah taruh angka.</p>
+  </div>
+
+  <div class="toolbar">
+    <div class="field">
+      <label for="f-year">Tahun</label>
+      <select id="f-year"></select>
+    </div>
+    <div class="field">
+      <label for="f-month">Bulan</label>
+      <select id="f-month"></select>
+    </div>
+    <div class="field">
+      <label>Minggu berjalan</label>
+      <div class="weekpick" id="f-week" role="group" aria-label="Pilih minggu"></div>
+    </div>
+    <div class="field grow">
+      <label for="f-branch">Cabang</label>
+      <select id="f-branch"></select>
+    </div>
+  </div>
+
+  <div id="note" class="note"></div>
+
+  <div id="periodband" class="periodband"></div>
+
+  <div id="acctable" class="acctable">
+    <div class="skeleton">Memuat data…</div>
+  </div>
+</main>
+
+<script type="module" src="assets/input.js"></script>
+</body>
+</html>

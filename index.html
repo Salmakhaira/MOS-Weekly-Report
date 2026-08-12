@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Masuk · Weekly Report MOS</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<main class="login-shell">
+  <form class="login-card" id="form-login">
+    <p class="eyebrow">Laporan MOS Mingguan</p>
+    <h1>Masuk ke akun Anda</h1>
+    <p class="sub">Gunakan email cabang yang didaftarkan admin head office.</p>
+
+    <div id="note" class="note"></div>
+
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="email" id="email" autocomplete="username" required placeholder="sampit@perusahaan.co.id">
+    </div>
+
+    <div class="field">
+      <label for="password">Kata sandi</label>
+      <input type="password" id="password" autocomplete="current-password" required>
+    </div>
+
+    <button type="submit" id="btn" style="width:100%">Masuk</button>
+
+    <p class="hint" style="margin:16px 0 0;text-align:center">
+      Lupa kata sandi atau belum punya akun? Hubungi admin head office.
+    </p>
+  </form>
+</main>
+
+<script type="module">
+import { sb, showNote } from './assets/app.js';
+
+const form = document.getElementById('form-login');
+const btn  = document.getElementById('btn');
+
+// Sudah punya sesi aktif? Langsung ke Home.
+const { data: { session } } = await sb.auth.getSession();
+if (session) location.replace('home.html');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  btn.disabled = true;
+  showNote('note', '');
+
+  const { error } = await sb.auth.signInWithPassword({
+    email: document.getElementById('email').value.trim(),
+    password: document.getElementById('password').value,
+  });
+
+  if (error) {
+    btn.disabled = false;
+    showNote('note',
+      error.message === 'Invalid login credentials'
+        ? 'Email atau kata sandi tidak cocok. Coba lagi.'
+        : error.message, 'err');
+    return;
+  }
+
+  const next = new URLSearchParams(location.search).get('next');
+  location.replace(next && /^[\w.-]+\.html$/.test(next) ? next : 'home.html');
+});
+</script>
+</body>
+</html>
