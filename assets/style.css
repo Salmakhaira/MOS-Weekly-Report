@@ -554,6 +554,39 @@ tr.grand   td.neg { color: #ffd9d9; }
 .trendtable td.neg { color: var(--danger); }
 .trendtable tr:last-child td { border-bottom: none; }
 
+.dropzone {
+  border: 2px dashed var(--line);
+  border-radius: var(--r);
+  padding: 36px 20px;
+  text-align: center;
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.dropzone:hover, .dropzone.drag { border-color: var(--accent); background: var(--accent-sft); }
+.dropzone .icon { font-size: 28px; margin-bottom: 8px; color: var(--muted); }
+.dropzone .main { font-weight: 600; color: var(--ink); }
+.dropzone .sub { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+.dropzone.has-file { border-style: solid; border-color: var(--ok); background: #eaf6ef; }
+.dropzone .filename { font-family: var(--font-num); font-size: 13px; color: var(--accent-dk); margin-top: 6px; }
+
+.summary-card { border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); padding: 18px; margin-top: 18px; }
+.summary-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.summary-stats .calcbox { flex-direction: column; align-items: flex-start; gap: 2px; }
+.summary-stats .calcbox b { font-size: 18px; }
+
+.matchlist { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.matchlist li { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.matchlist .ok   { color: var(--ok); }
+.matchlist .warn { color: var(--ochre); }
+
+table.mos .sticky-only {
+  position: sticky; left: 0; min-width: 200px;
+  background: var(--surface); text-align: left; font-family: var(--font-ui); z-index: 10;
+  border-right: 1px solid var(--line);
+}
+table.mos thead .sticky-only { background: #e9eeec; z-index: 30; }
+
 .legend {
   display: flex; flex-wrap: wrap; gap: 16px;
   margin-top: 12px; font-size: 12px; color: var(--muted);
