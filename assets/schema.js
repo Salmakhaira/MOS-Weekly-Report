@@ -119,7 +119,7 @@ export function computeRow(r, week) {
   const o = { ...r };
 
   o.total_ol_prtm    = act + qc80 + num(r.po_non_sap);             // AF
-  o.balance_prtm     = o.total_ol_prtm - num(r.ol_min_prtm);       // AH = AF - AG
+  o.balance_prtm     = num(r.ol_min_prtm) - o.total_ol_prtm;       // AH = AG - AF
   o.total_po         = act + num(r.po_last_month);                 // AJ
   o.total_po_outlook = o.total_ol_prtm + num(r.po_last_month);     // AK = AF + AI
 
@@ -184,7 +184,12 @@ export function fmt(value, col) {
   if (value === null || value === undefined || value === '') return '';
   if (col?.type === 'text') return String(value);
   const n = num(value);
-  if (col?.format === 'percent') return (n * 100).toFixed(1) + '%';
+  if (col?.format === 'percent') {
+    return (n * 100).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 6 }) + '%';
+  }
   if (n === 0) return '-';
-  return n.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Tanpa pembulatan: tampilkan persis hasil hitungnya, sampai 6 desimal
+  // (sama seperti presisi yang disimpan di database), tanpa angka nol
+  // tambahan di belakang kalau tidak perlu.
+  return n.toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 6 });
 }
