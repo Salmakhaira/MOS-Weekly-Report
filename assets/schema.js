@@ -119,7 +119,7 @@ export function computeRow(r, week) {
   const o = { ...r };
 
   o.total_ol_prtm    = act + qc80 + num(r.po_non_sap);             // AF
-  o.balance_prtm     = num(r.ol_min_prtm) - o.total_ol_prtm;       // AH = AG - AF
+  o.balance_prtm     = o.total_ol_prtm - num(r.ol_min_prtm);       // AH = AF - AG
   o.total_po         = act + num(r.po_last_month);                 // AJ
   o.total_po_outlook = o.total_ol_prtm + num(r.po_last_month);     // AK = AF + AI
 
