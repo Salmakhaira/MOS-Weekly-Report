@@ -185,11 +185,11 @@ export function fmt(value, col) {
   if (col?.type === 'text') return String(value);
   const n = num(value);
   if (col?.format === 'percent') {
-    return (n * 100).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + '%';
+    return (n * 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + '%';
   }
   if (n === 0) return '-';
   // Dibulatkan ke bilangan bulat untuk tampilan (seperti format Excel pada
   // umumnya) — angka aslinya di database tetap presisi penuh, ini cuma
-  // soal tampilan.
-  return n.toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  // soal tampilan. Pemisah ribuan pakai koma sesuai permintaan.
+  return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
