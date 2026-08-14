@@ -87,3 +87,13 @@ export function defaultPeriod() {
   const week = Math.min(4, Math.ceil(d.getDate() / 7));
   return { year: d.getFullYear(), month: d.getMonth() + 1, week };
 }
+
+/** Supaya dropdown filter (<details class="filterdrop">) otomatis tertutup
+    kalau klik di mana pun di luar kotaknya, bukan cuma di summary-nya lagi. */
+export function closeFilterDropdownsOnOutsideClick(selector = 'details.filterdrop') {
+  document.addEventListener('click', (e) => {
+    document.querySelectorAll(selector + '[open]').forEach((d) => {
+      if (!d.contains(e.target)) d.removeAttribute('open');
+    });
+  });
+}
