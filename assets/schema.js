@@ -108,32 +108,40 @@ export const NUMERIC_KEYS = STORED.filter(c => c.type !== 'text').map(c => c.key
 
 const num = v => (typeof v === 'number' ? v : parseFloat(v)) || 0;
 
-/** Cari ACT PRTM dari minggu TERAKHIR yang sudah ada angkanya (bukan nol),
-    dimulai dari W4 mundur ke W1. Dipakai khusus untuk rumus TOTAL PO,
-    yang tidak ikut minggu yang sedang dipilih di layar — beda dengan
-    Total OL PRTM/Total PO Outlook yang tetap mengikuti minggu terpilih. */
-function lastFilledActPrtm(r) {
+/** Cari nilai dari minggu TERAKHIR yang sudah ada angkanya (bukan nol),
+    dimulai dari W4 mundur ke W1. `template(w)` menghasilkan nama key
+    untuk minggu w, misal `w => 'act_prtm_w' + w`. Dipakai untuk rumus
+    yang tidak lagi ikut minggu yang sedang dipilih di layar, melainkan
+    otomatis memakai minggu terakhir yang sudah diisi datanya. */
+function lastFilledWeekValue(r, template) {
   for (let w = 4; w >= 1; w--) {
-    const v = num(r[`act_prtm_w${w}`]);
+    const v = num(r[template(w)]);
     if (v !== 0) return v;
   }
   return 0;
 }
 
 /**
- * Terapkan seluruh rumus Excel. `week` menentukan kolom minggu mana
- * yang dipakai rumus berjalan (di Excel ini diubah manual tiap minggu).
+ * Terapkan seluruh rumus Excel.
+ *
+ * Catatan: parameter `week` dipertahankan di sini demi kompatibilitas
+ * pemanggilan dari file lain (input.js, view.js semuanya memanggil
+ * computeRow(row, state.week)), tapi TOTAL OL PRTM, TOTAL PO, BALANCE
+ * PRTM, dan TOTAL PO OUTLOOK sekarang tidak lagi memakainya — keempatnya
+ * otomatis memakai ACT PRTM & QUOT CONFIDENCE >80% dari minggu terakhir
+ * yang sudah terisi datanya (bukan dari minggu yang sedang dipilih di
+ * layar), sesuai revisi terbaru.
  */
 export function computeRow(r, week) {
-  const w = WEEKS.includes(Number(week)) ? Number(week) : 1;
-  const act   = num(r[`act_prtm_w${w}`]);
-  const qc80  = num(r[`qc_w${w}_gt80`]);
   const o = { ...r };
 
-  o.total_ol_prtm    = act + qc80 + num(r.po_non_sap);                    // AF
-  o.balance_prtm     = o.total_ol_prtm - num(r.ol_min_prtm);              // AH = AF - AG
-  o.total_po         = lastFilledActPrtm(r) + num(r.po_last_month);       // AJ — pakai ACT PRTM minggu terakhir yang terisi
-  o.total_po_outlook = o.total_ol_prtm + num(r.po_last_month);            // AK = AF + AI
+  const lastAct  = lastFilledWeekValue(r, w => `act_prtm_w${w}`);
+  const lastQc80 = lastFilledWeekValue(r, w => `qc_w${w}_gt80`);
+
+  o.total_ol_prtm    = lastAct + lastQc80 + num(r.po_non_sap);          // AF — ACT PRTM & QC>80% minggu terakhir terisi
+  o.balance_prtm     = o.total_ol_prtm - num(r.ol_min_prtm);            // AH = AF - AG
+  o.total_po         = lastAct + num(r.po_last_month);                  // AJ — ACT PRTM minggu terakhir terisi
+  o.total_po_outlook = o.total_ol_prtm + num(r.po_last_month);          // AK = AF + AI
 
   o.ol_revenue_poco_prtm =                                          // AT = SUM(AL:AS)
       num(r.poco_not_active) + num(r.poco_plafond) + num(r.poco_internal) + num(r.poco_external)
