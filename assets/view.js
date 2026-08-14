@@ -402,7 +402,7 @@ const FILL_AREA   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDFE
 const FILL_TOTAL  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF243935' } };
 const FILL_GRAND  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F6E64' } };
 const THIN_BORDER = { style: 'thin', color: { argb: 'FFD9E0DC' } };
-const NUMFMT = '#,##0.######';
+const NUMFMT = '#,##0';
 
 function styleTitleRow(ws, rowNum, text, size, lastCol) {
   ws.mergeCells(rowNum, 1, rowNum, lastCol);
