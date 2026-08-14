@@ -1,16 +1,3 @@
-/* =====================================================================
-   view.js — menyusun ulang tampilan Weekly Report dari data mentah.
-
-   Ada dua bentuk tabel tergantung filter:
-   - Tepat 1 bulan + 1 tahun dipilih -> tabel DETAIL, persis Excel
-     (kolom A sampai BX, per cabang & salesman).
-   - Lebih dari satu bulan/tahun (atau "semua") dipilih -> tabel TREN:
-     satu baris per periode, hanya 4 angka kunci per baris. Kolom A-BX
-     dipaksakan ke banyak bulan sekaligus akan jadi ratusan kolom dan
-     tidak terbaca, jadi bentuknya sengaja diringkas untuk melihat
-     perkembangan dari waktu ke waktu.
-   ===================================================================== */
-
 import { sb, requireSession, renderShell, showNote, escapeHtml, closeFilterDropdownsOnOutsideClick } from './app.js';
 import { COLUMNS, MONTHS, WEEKS, computeRow, aggregate, buildHeaderMatrix, fmt } from './schema.js';
 
