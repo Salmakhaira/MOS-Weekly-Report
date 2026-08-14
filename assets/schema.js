@@ -108,6 +108,18 @@ export const NUMERIC_KEYS = STORED.filter(c => c.type !== 'text').map(c => c.key
 
 const num = v => (typeof v === 'number' ? v : parseFloat(v)) || 0;
 
+/** Cari ACT PRTM dari minggu TERAKHIR yang sudah ada angkanya (bukan nol),
+    dimulai dari W4 mundur ke W1. Dipakai khusus untuk rumus TOTAL PO,
+    yang tidak ikut minggu yang sedang dipilih di layar — beda dengan
+    Total OL PRTM/Total PO Outlook yang tetap mengikuti minggu terpilih. */
+function lastFilledActPrtm(r) {
+  for (let w = 4; w >= 1; w--) {
+    const v = num(r[`act_prtm_w${w}`]);
+    if (v !== 0) return v;
+  }
+  return 0;
+}
+
 /**
  * Terapkan seluruh rumus Excel. `week` menentukan kolom minggu mana
  * yang dipakai rumus berjalan (di Excel ini diubah manual tiap minggu).
@@ -118,10 +130,10 @@ export function computeRow(r, week) {
   const qc80  = num(r[`qc_w${w}_gt80`]);
   const o = { ...r };
 
-  o.total_ol_prtm    = act + qc80 + num(r.po_non_sap);             // AF
-  o.balance_prtm     = o.total_ol_prtm - num(r.ol_min_prtm);       // AH = AF - AG
-  o.total_po         = act + num(r.po_last_month);                 // AJ
-  o.total_po_outlook = o.total_ol_prtm + num(r.po_last_month);     // AK = AF + AI
+  o.total_ol_prtm    = act + qc80 + num(r.po_non_sap);                    // AF
+  o.balance_prtm     = o.total_ol_prtm - num(r.ol_min_prtm);              // AH = AF - AG
+  o.total_po         = lastFilledActPrtm(r) + num(r.po_last_month);       // AJ — pakai ACT PRTM minggu terakhir yang terisi
+  o.total_po_outlook = o.total_ol_prtm + num(r.po_last_month);            // AK = AF + AI
 
   o.ol_revenue_poco_prtm =                                          // AT = SUM(AL:AS)
       num(r.poco_not_active) + num(r.poco_plafond) + num(r.poco_internal) + num(r.poco_external)
