@@ -185,11 +185,11 @@ export function fmt(value, col) {
   if (col?.type === 'text') return String(value);
   const n = num(value);
   if (col?.format === 'percent') {
-    return (n * 100).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 6 }) + '%';
+    return (n * 100).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + '%';
   }
   if (n === 0) return '-';
-  // Tanpa pembulatan: tampilkan persis hasil hitungnya, sampai 6 desimal
-  // (sama seperti presisi yang disimpan di database), tanpa angka nol
-  // tambahan di belakang kalau tidak perlu.
-  return n.toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+  // Dibulatkan ke bilangan bulat untuk tampilan (seperti format Excel pada
+  // umumnya) — angka aslinya di database tetap presisi penuh, ini cuma
+  // soal tampilan.
+  return n.toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
