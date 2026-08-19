@@ -533,7 +533,7 @@ tr.branch  .sticky-1, tr.branch .sticky-2, tr.branch .sticky-3 { background: #ef
 tr.sales   .sticky-3 { padding-left: 22px; color: var(--graphite); }
 tr.spacer  td { height: 8px; background: var(--paper); border-bottom: none; }
 tr.total   td { background: var(--ink); color: #e8efec; font-weight: 600; border-bottom-color: #243935; }
-tr.total   .sticky-1, tr.total .sticky-2, tr.total .sticky-3 { background: var(--ink); color: #fff; }
+tr.total   .sticky-1, tr.total .sticky-2, tr.total .sticky-3, tr.total .sticky-only { background: var(--ink); color: #fff; }
 tr.total   td.neg { color: #f0a3a3; }
 tr.area    td { background: #dfe8e5; font-weight: 600; }
 tr.area    .sticky-1, tr.area .sticky-2, tr.area .sticky-3 { background: #dfe8e5; }
@@ -646,6 +646,7 @@ table.mos tr.prevrow td { color: var(--muted); font-size: 11px; font-style: ital
 table.mos tr.prevrow td.sticky-only { background: var(--paper); padding-left: 22px; }
 table.mos thead th.live { background: var(--accent); color: #fff; }
 table.mos td .warnflag { color: var(--ochre); font-size: 12px; }
+table.mos td.editcell { background: #fbfdfc; padding: 3px 4px; }
 table.mos td.stat { text-align: left; }
 table.mos td.stat .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--line); margin-right: 6px; }
 table.mos td.stat.saved .dot { background: var(--ok); }
