@@ -1,33 +1,6 @@
-/* =====================================================================
-   input.js (versi Upload) — ketua cabang unggah file Excel SETIAP
-   MINGGU (bukan sekali per bulan). Sistem hanya membaca kolom minggu
-   yang dipilih dari file, menyimpan ke database yang sama dengan
-   versi form, lalu menampilkan ringkasan di halaman ini.
-
-   Begitu satu minggu untuk satu salesman berhasil disimpan, minggu itu
-   otomatis terkunci (w{n}_submitted = true) — tidak bisa diunggah ulang
-   oleh cabang, hanya admin head office yang bisa mengubahnya. Penguncian
-   sesungguhnya terjadi di database (trigger enforce_week_lock, lihat
-   supabase/04_week_submission_lock.sql); pengecekan di sini cuma supaya
-   ketua cabang dapat pesan yang jelas SEBELUM mengunggah, bukan baru
-   gagal di tengah proses.
-
-   Cara membaca file:
-   1. Cari sheet yang namanya cocok dengan "BULAN TAHUN" (mis. "AGUSTUS
-      2026") — sama seperti sebelumnya.
-   2. Cocokkan nama di kolom C terhadap daftar salesman cabang di database.
-   3. HANYA kolom minggu yang dipilih di atas yang dibaca & disimpan
-      (mis. pilih W2 -> hanya kolom TM W2, Act PRTM W2, Quot Confidence
-      W2 yang diambil dari file). Minggu lain yang sudah tersimpan
-      sebelumnya tidak disentuh.
-   4. Field yang bukan per-minggu (Market Size, Plan Sales Master, MS
-      Teams Schedule, Kemampuan PO, PO Non SAP, OL Min PRTM, PO Bulan
-      Lalu) selalu disegarkan dari file, karena field itu tidak
-      dikunci per-minggu.
-   ===================================================================== */
 
 import { sb, requireSession, renderShell, showNote, escapeHtml } from './app.js';
-import { COLUMNS, MONTHS, WEEKS, STORED, computeRow, buildHeaderMatrix, fmt } from './schema.js';
+import { COLUMNS, MONTHS, WEEKS, STORED, computeRow, aggregate, buildHeaderMatrix, fmt } from './schema.js';
 
 /* Kalau ada error tak terduga di mana pun, tampilkan di layar supaya
    halaman tidak diam-diam "macet"/gagal tanpa penjelasan. */
@@ -87,6 +60,7 @@ const state = {
   branchName: '',
   file: null,
   previewWeek: 1,
+  lastBranchOlMinPrtm: null,
 };
 
 /* ---------- Pemilih periode, minggu & cabang ---------------------------- */
@@ -223,6 +197,15 @@ async function processFile() {
     const w = state.week;
     const weekKeys = new Set(weekFieldKeys(w));
 
+    // Baris TOTAL cabang: namanya di kolom C sama dengan nama cabang (bukan
+    // nama salesman) — ini baris tempat OL Min PRTM sebenarnya ada, bukan
+    // di baris salesman perorangan.
+    let branchOlMinPrtm = null;
+    const totalRowIdx = rows.findIndex(r => normalize(r?.[nameCol]) === normalize(state.branchName));
+    if (totalRowIdx !== -1) {
+      branchOlMinPrtm = toNum(rows[totalRowIdx][colIdx('AG')]);
+    }
+
     const matched = [];
     const locked = [];
     const unmatched = [];
@@ -278,12 +261,27 @@ async function processFile() {
       if (d) { m.row.id = d.id; m.row.updated_at = d.updated_at; }
     }
 
+    let olMinPrtmNote = '';
+    if (branchOlMinPrtm !== null) {
+      const { error: e3 } = await sb.from('branch_monthly').upsert({
+        branch_id: state.branchId, period_year: state.year, period_month: state.month,
+        ol_min_prtm: branchOlMinPrtm,
+      }, { onConflict: 'branch_id,period_year,period_month' });
+      olMinPrtmNote = e3
+        ? ` (OL Min PRTM cabang gagal disimpan: ${e3.message})`
+        : ` OL Min PRTM cabang (${branchOlMinPrtm}) ikut tersimpan.`;
+    } else {
+      olMinPrtmNote = ' Baris TOTAL cabang tidak ditemukan di sheet, OL Min PRTM cabang tidak diperbarui.';
+    }
+
     el.status.textContent = 'Tersimpan ' + new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
     showNote('note',
       `Berhasil: ${matched.length} salesman untuk minggu ${w} tersimpan dari sheet "${sheetName}".` +
-      (locked.length ? ` ${locked.length} salesman dilewati karena minggu ${w} sudah pernah disubmit.` : ''),
+      (locked.length ? ` ${locked.length} salesman dilewati karena minggu ${w} sudah pernah disubmit.` : '') +
+      olMinPrtmNote,
       'ok');
     state.previewWeek = w;
+    state.lastBranchOlMinPrtm = branchOlMinPrtm;
     renderSummary(sheetName, matched, locked, unmatched);
   } catch (err) {
     el.status.textContent = '';
@@ -356,6 +354,16 @@ function drawPreview(matched) {
     }
     tbody += '</tr>';
   }
+
+  // Baris TOTAL — satu-satunya baris yang menampilkan Balance PRTM & OL Min
+  // PRTM, karena keduanya angka level cabang, bukan per salesman.
+  const totalCalc = aggregate(matched.map(m => m.row), w, state.lastBranchOlMinPrtm);
+  tbody += `<tr class="total"><td class="sticky-only">TOTAL</td>`;
+  for (const c of cols) {
+    const v = totalCalc[c.key];
+    tbody += `<td class="${Number(v) < 0 ? 'neg' : ''}">${escapeHtml(fmt(v, c))}</td>`;
+  }
+  tbody += '</tr>';
   tbody += '</tbody>';
 
   const target = document.getElementById('preview-table');
