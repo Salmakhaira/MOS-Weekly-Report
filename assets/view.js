@@ -1,8 +1,16 @@
 import { sb, requireSession, renderShell, showNote, escapeHtml, closeFilterDropdownsOnOutsideClick } from './app.js';
-import { COLUMNS, MONTHS, WEEKS, computeRow, aggregate, buildHeaderMatrix, fmt } from './schema.js';
+import { COLUMNS, MONTHS, WEEKS, STORED, computeRow, aggregate, buildHeaderMatrix, fmt } from './schema.js';
 
 const { profile } = await requireSession();
 renderShell(profile, 'view');
+const isAdmin = profile.role === 'admin';
+
+/* Field yang boleh diedit admin di baris salesman View Data — persis
+   yang bisa diisi lewat Input Data (angka minggu terpilih + field bulanan). */
+function editableSalesKeys(w) {
+  return [`act_prtm_w${w}`, `qc_w${w}_gt80`, `qc_w${w}_50_80`, `qc_w${w}_lt50`,
+          'plan_sales_master', 'po_non_sap', 'po_last_month'];
+}
 
 const TREND_METRICS = [
   { key: 'total_ol_prtm',    label: 'Total OL PRTM',    short: 'OL PRTM' },
@@ -27,6 +35,16 @@ const el = {
   export: document.getElementById('btn-export'),
   legend: document.getElementById('legend-detail'),
   lblWeek: document.getElementById('lbl-week'),
+  btnEditMode: document.getElementById('btn-edit-mode'),
+  editHint: document.getElementById('edit-hint'),
+  editBar: document.getElementById('edit-bar'),
+  btnSaveEdits: document.getElementById('btn-save-edits'),
+  btnCancelEdits: document.getElementById('btn-cancel-edits'),
+  editStatus: document.getElementById('edit-status'),
+  editDirtyCount: document.getElementById('edit-dirty-count'),
+  editOlMinPrtmCard: document.getElementById('edit-olminprtm'),
+  editOlMinPrtm: document.getElementById('f-edit-ol-min-prtm'),
+  editOlMinPrtmStatus: document.getElementById('edit-ol-min-prtm-status'),
 };
 
 const thisYear = new Date().getFullYear();
@@ -42,6 +60,11 @@ const state = {
   isSingle: true,
   trendMetric: 'total_ol_prtm',
   expandedYears: new Set(),
+  editMode: false,
+  editDirty: new Set(),     // salesman_id yang punya perubahan belum tersimpan
+  editValues: new Map(),    // salesman_id -> { key: value }
+  editOlMinPrtmValue: null,
+  editOlMinPrtmDirty: false,
 };
 
 /* ---------- Checklist Tahun & Bulan (multi-pilih) ----------------------- */
@@ -121,9 +144,134 @@ el.week.addEventListener('click', (e) => {
   draw();
 });
 
-el.branch.addEventListener('change', () => { state.branchFilter = el.branch.value; draw(); });
+el.branch.addEventListener('change', () => {
+  state.branchFilter = el.branch.value;
+  refreshOlMinPrtmEditCard();
+  draw();
+});
 el.detail.addEventListener('change', draw);
 el.export.addEventListener('click', exportFile);
+
+if (isAdmin) {
+  el.btnEditMode.style.display = '';
+  el.btnEditMode.addEventListener('click', () => {
+    if (state.editMode && (state.editDirty.size || state.editOlMinPrtmDirty)) {
+      if (!confirm('Ada perubahan yang belum disimpan. Keluar dari mode edit tanpa menyimpan?')) return;
+    }
+    state.editMode = !state.editMode;
+    state.editDirty.clear();
+    state.editValues.clear();
+    state.editOlMinPrtmDirty = false;
+    el.btnEditMode.textContent = state.editMode ? 'Tutup Mode Edit' : 'Mode Edit';
+    el.editHint.style.display = state.editMode ? '' : 'none';
+    el.editBar.style.display = state.editMode ? '' : 'none';
+    refreshOlMinPrtmEditCard();
+    refreshEditDirtyCount();
+    draw();
+  });
+
+  el.btnCancelEdits.addEventListener('click', () => {
+    state.editDirty.clear();
+    state.editValues.clear();
+    state.editOlMinPrtmDirty = false;
+    showNote('note', '');
+    refreshOlMinPrtmEditCard();
+    refreshEditDirtyCount();
+    draw();
+  });
+
+  el.btnSaveEdits.addEventListener('click', saveEdits);
+
+  el.editOlMinPrtm.addEventListener('input', () => {
+    state.editOlMinPrtmValue = parseFloat(el.editOlMinPrtm.value) || 0;
+    state.editOlMinPrtmDirty = true;
+    el.editOlMinPrtmStatus.textContent = 'Belum disimpan';
+    refreshEditDirtyCount();
+  });
+}
+
+function refreshOlMinPrtmEditCard() {
+  if (!isAdmin || !state.editMode || !state.branchFilter || !state.isSingle) {
+    el.editOlMinPrtmCard.style.display = 'none';
+    return;
+  }
+  el.editOlMinPrtmCard.style.display = '';
+  const [year] = state.years, [month] = state.months;
+  const row = state.branchMonthly.find(r =>
+    r.branch_id === state.branchFilter && r.period_year === year && r.period_month === month);
+  if (state.editOlMinPrtmDirty) {
+    el.editOlMinPrtm.value = state.editOlMinPrtmValue;
+  } else {
+    el.editOlMinPrtm.value = Number(row?.ol_min_prtm) || 0;
+    el.editOlMinPrtmStatus.textContent = row ? 'Tersimpan' : 'Belum pernah disimpan.';
+  }
+}
+
+function refreshEditDirtyCount() {
+  const n = state.editDirty.size + (state.editOlMinPrtmDirty ? 1 : 0);
+  if (el.editDirtyCount) el.editDirtyCount.textContent = n;
+}
+
+/** Susun payload lengkap satu baris salesman: field yang diedit dipakai,
+    sisanya diambil dari data yang sudah tersimpan — supaya kolom lain
+    tidak ikut tertimpa/kosong (pelajaran dari bug id null sebelumnya). */
+function toEditPayload(sid, year, month) {
+  const existing = state.entries.find(e =>
+    e.salesman_id === sid && e.period_year === year && e.period_month === month) ?? {};
+  const branchId = existing.branch_id ?? state.salesmen.find(s => s.id === sid)?.branch_id;
+  const edits = state.editValues.get(sid) ?? {};
+  const out = { period_year: year, period_month: month, branch_id: branchId, salesman_id: sid };
+  for (const c of STORED) {
+    if (edits[c.key] !== undefined) {
+      out[c.key] = c.type === 'text' ? edits[c.key] : (Number(edits[c.key]) || 0);
+    } else {
+      out[c.key] = c.type === 'text' ? (existing[c.key] ?? '') : (Number(existing[c.key]) || 0);
+    }
+  }
+  return out;
+}
+
+async function saveEdits() {
+  if (!state.editDirty.size && !state.editOlMinPrtmDirty) {
+    showNote('note', 'Tidak ada perubahan untuk disimpan.', 'info');
+    return;
+  }
+  el.btnSaveEdits.disabled = true;
+  showNote('note', '');
+  const [year] = state.years, [month] = state.months;
+
+  if (state.editDirty.size) {
+    const payload = [...state.editDirty].map(sid => toEditPayload(sid, year, month));
+    const { error } = await sb.from('mos_entries')
+      .upsert(payload, { onConflict: 'period_year,period_month,salesman_id' });
+    if (error) {
+      showNote('note', 'Gagal menyimpan: ' + error.message, 'err');
+      el.btnSaveEdits.disabled = false;
+      return;
+    }
+  }
+
+  if (state.editOlMinPrtmDirty && state.branchFilter) {
+    const { error } = await sb.from('branch_monthly').upsert({
+      branch_id: state.branchFilter, period_year: year, period_month: month,
+      ol_min_prtm: state.editOlMinPrtmValue,
+    }, { onConflict: 'branch_id,period_year,period_month' });
+    if (error) {
+      showNote('note', 'Gagal menyimpan OL Min PRTM: ' + error.message, 'err');
+      el.btnSaveEdits.disabled = false;
+      return;
+    }
+  }
+
+  state.editDirty.clear();
+  state.editValues.clear();
+  state.editOlMinPrtmDirty = false;
+  el.btnSaveEdits.disabled = false;
+  showNote('note', 'Perubahan tersimpan.', 'ok');
+  refreshEditDirtyCount();
+  await load();
+  refreshOlMinPrtmEditCard();
+}
 
 await loadMasters();
 await load();
@@ -144,6 +292,20 @@ async function loadMasters() {
 async function load() {
   el.wrap.innerHTML = '<div class="skeleton">Memuat data…</div>';
   state.isSingle = state.years.size === 1 && state.months.size === 1;
+
+  if (isAdmin) {
+    el.btnEditMode.style.display = state.isSingle ? '' : 'none';
+    if (!state.isSingle && state.editMode) {
+      state.editMode = false;
+      state.editDirty.clear();
+      state.editValues.clear();
+      state.editOlMinPrtmDirty = false;
+      el.btnEditMode.textContent = 'Mode Edit';
+      el.editHint.style.display = 'none';
+      el.editBar.style.display = 'none';
+      el.editOlMinPrtmCard.style.display = 'none';
+    }
+  }
 
   let query = sb.from('mos_entries').select('*');
   if (state.isSingle) {
@@ -215,10 +377,10 @@ function buildDetailModel(year, month) {
     branchAgg.set(b.id, { branch: b, raws });
     no++;
 
-    model.push({ kind: 'branch', no, plant: b.code, name: b.name, data: agg });
+    model.push({ kind: 'branch', no, plant: b.code, name: b.name, branchId: b.id, data: agg });
     if (el.detail.checked) {
       people.forEach(s => model.push({
-        kind: 'sales', no: '', plant: '', name: s.name,
+        kind: 'sales', no: '', plant: '', name: s.name, salesmanId: s.id,
         data: computeRow(byId.get(s.id) ?? {}, state.week), // tanpa branchOlMinPrtm -> Balance PRTM kosong
       }));
     }
@@ -251,6 +413,8 @@ function drawDetail() {
   const cols = COLUMNS;
   const head = buildHeaderMatrix(cols);
   const mark = new RegExp('W' + state.week + '$');
+  const editing = isAdmin && state.editMode;
+  const editableKeys = new Set(editableSalesKeys(state.week));
 
   let html = '<table class="mos"><thead>';
   for (let lvl = 0; lvl < 3; lvl++) {
@@ -279,14 +443,33 @@ function drawDetail() {
             `<td class="sticky-3">${escapeHtml(row.name)}</td>`;
     for (const c of cols) {
       const v = row.data?.[c.key];
-      const neg = c.type !== 'text' && Number(v) < 0 ? ' neg' : '';
-      const txt = c.type === 'text' ? ' txt' : '';
-      html += `<td class="${neg}${txt}">${escapeHtml(fmt(v, c))}</td>`;
+      if (editing && row.kind === 'sales' && editableKeys.has(c.key)) {
+        const edited = state.editValues.get(row.salesmanId)?.[c.key];
+        const shown = edited !== undefined ? edited : (Number(v) || 0);
+        html += `<td class="editcell"><input type="number" step="any" inputmode="decimal" ` +
+                `data-sid="${row.salesmanId}" data-key="${c.key}" value="${shown}"></td>`;
+      } else {
+        const neg = c.type !== 'text' && Number(v) < 0 ? ' neg' : '';
+        const txt = c.type === 'text' ? ' txt' : '';
+        html += `<td class="${neg}${txt}">${escapeHtml(fmt(v, c))}</td>`;
+      }
     }
     html += '</tr>';
   }
   html += '</tbody></table>';
   el.wrap.innerHTML = html;
+
+  if (editing) {
+    el.wrap.querySelectorAll('input[data-sid]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const sid = inp.dataset.sid, key = inp.dataset.key;
+        if (!state.editValues.has(sid)) state.editValues.set(sid, {});
+        state.editValues.get(sid)[key] = parseFloat(inp.value) || 0;
+        state.editDirty.add(sid);
+        refreshEditDirtyCount();
+      });
+    });
+  }
 }
 
 /* ---------- Mode TREN (lebih dari satu periode) — kolom tahun bisa dibuka -- */
