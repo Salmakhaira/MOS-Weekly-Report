@@ -46,6 +46,25 @@
       </label>
     </div>
     <button class="ghost" id="btn-export">Unduh Excel</button>
+    <button class="ghost" id="btn-edit-mode" style="display:none">Mode Edit</button>
+  </div>
+
+  <div id="edit-olminprtm" class="card" style="display:none;margin-bottom:16px">
+    <p class="subhead" style="margin-top:0">OL Min PRTM cabang <span class="colref">admin · edit</span></p>
+    <p class="hint" style="margin:0 0 12px">Pilih satu cabang lewat filter "Tampilkan" di atas untuk mengubah angka ini.</p>
+    <div class="row" style="grid-template-columns:220px auto;align-items:end">
+      <div class="field" style="margin:0">
+        <label for="f-edit-ol-min-prtm">OL Min PRTM</label>
+        <input type="number" step="any" inputmode="decimal" id="f-edit-ol-min-prtm" value="0">
+      </div>
+      <span class="hint" id="edit-ol-min-prtm-status"></span>
+    </div>
+  </div>
+
+  <div id="edit-bar" class="formbar" style="display:none;margin-bottom:16px">
+    <button id="btn-save-edits">Simpan Perubahan (<span id="edit-dirty-count">0</span>)</button>
+    <button class="ghost" id="btn-cancel-edits">Batal</button>
+    <span class="hint" id="edit-status"></span>
   </div>
 
   <div id="note" class="note"></div>
@@ -53,6 +72,10 @@
   <div class="tablewrap" id="tablewrap">
     <div class="skeleton">Memuat data…</div>
   </div>
+
+  <p class="hint" id="edit-hint" style="display:none;margin:-4px 0 12px">
+    Mode edit aktif — sel dengan latar putih di baris salesman bisa diketik langsung. Klik "Simpan Perubahan" untuk menyimpan.
+  </p>
 
   <div class="legend" id="legend-detail">
     <span><i style="background:#eff4f2;border:1px solid #dbe2de"></i>Baris cabang</span>
