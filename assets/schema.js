@@ -1,12 +1,3 @@
-/* =====================================================================
-   schema.js — Sumber kebenaran tunggal untuk struktur kolom MOS.
-   Dipakai bersama oleh form Input Data dan tabel View Data.
-
-   path : hirarki header (baris 3 / 4 / 5 di Excel)
-   input: true  -> muncul sebagai isian di form
-   calc : true  -> dihitung otomatis, tidak pernah disimpan mentah
-   ===================================================================== */
-
 export const MONTHS = [
   'JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI',
   'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER',
@@ -45,7 +36,10 @@ export const COLUMNS = [
 
   { col: 'AE', key: 'po_non_sap',      path: [OP, 'PO NON SAP'],   input: true },
   { col: 'AF', key: 'total_ol_prtm',   path: [OP, 'TOTAL OL PRTM'], calc: true },
-  { col: 'AG', key: 'ol_min_prtm',     path: [OP, 'OL MIN PRTM'],  input: true },
+  { col: 'AG', key: 'ol_min_prtm',     path: [OP, 'OL MIN PRTM'],  calc: true },
+  // ^ Bukan input per-salesman lagi. Ini angka target LEVEL CABANG, diisi
+  //   sekali per cabang per bulan lewat tabel branch_monthly, bukan lewat
+  //   mos_entries. computeRow() mengisinya lewat parameter branchOlMinPrtm.
   { col: 'AH', key: 'balance_prtm',    path: [OP, 'BALANCE PRTM (OL - PLAN PRTM)'], calc: true },
   { col: 'AI', key: 'po_last_month',   path: [OP, 'PO LAST MONTH by SAP'], input: true },
   { col: 'AJ', key: 'total_po',        path: [OP, 'TOTAL PO (POCO+PRTM)'], calc: true },
@@ -124,22 +118,28 @@ function lastFilledWeekValue(r, template) {
 /**
  * Terapkan seluruh rumus Excel.
  *
- * Catatan: parameter `week` dipertahankan di sini demi kompatibilitas
- * pemanggilan dari file lain (input.js, view.js semuanya memanggil
- * computeRow(row, state.week)), tapi TOTAL OL PRTM, TOTAL PO, BALANCE
- * PRTM, dan TOTAL PO OUTLOOK sekarang tidak lagi memakainya — keempatnya
- * otomatis memakai ACT PRTM & QUOT CONFIDENCE >80% dari minggu terakhir
- * yang sudah terisi datanya (bukan dari minggu yang sedang dipilih di
- * layar), sesuai revisi terbaru.
+ * `branchOlMinPrtm` — angka OL MIN PRTM level CABANG (bukan per-salesman,
+ * lihat tabel branch_monthly). Kalau parameter ini TIDAK diisi (baris
+ * salesman perorangan), OL MIN PRTM dan BALANCE PRTM sengaja dikosongkan
+ * (bukan nol, betul-betul kosong) — sesuai file Excel aslinya, di mana
+ * kedua kolom itu cuma terisi di baris TOTAL cabang, tidak per orang.
+ * Kalau diisi (dipanggil untuk baris cabang/area/grand total), baru
+ * kedua kolom itu dihitung.
  */
-export function computeRow(r, week) {
+export function computeRow(r, week, branchOlMinPrtm) {
   const o = { ...r };
 
   const lastAct  = lastFilledWeekValue(r, w => `act_prtm_w${w}`);
   const lastQc80 = lastFilledWeekValue(r, w => `qc_w${w}_gt80`);
 
   o.total_ol_prtm    = lastAct + lastQc80 + num(r.po_non_sap);          // AF — ACT PRTM & QC>80% minggu terakhir terisi
-  o.balance_prtm     = o.total_ol_prtm - num(r.ol_min_prtm);            // AH = AF - AG
+  if (branchOlMinPrtm === undefined || branchOlMinPrtm === null) {
+    o.ol_min_prtm  = null;
+    o.balance_prtm = null;                                              // AH — kosong utk baris per-salesman
+  } else {
+    o.ol_min_prtm  = num(branchOlMinPrtm);
+    o.balance_prtm = o.total_ol_prtm - o.ol_min_prtm;                   // AH = AF - AG (cuma di baris total)
+  }
   o.total_po         = lastAct + num(r.po_last_month);                  // AJ — ACT PRTM minggu terakhir terisi
   o.total_po_outlook = o.total_ol_prtm + num(r.po_last_month);          // AK = AF + AI
 
@@ -167,11 +167,15 @@ export function computeRow(r, week) {
 }
 
 /** Jumlahkan beberapa baris mentah, lalu hitung ulang rumusnya. */
-export function aggregate(rows, week) {
+/** Jumlahkan beberapa baris mentah, lalu hitung ulang rumusnya.
+    `branchOlMinPrtm` diteruskan ke computeRow — isi dengan angka OL MIN
+    PRTM cabang (dari branch_monthly) supaya Balance PRTM ikut terhitung
+    di baris agregat (total cabang/area/nasional). */
+export function aggregate(rows, week, branchOlMinPrtm) {
   const sum = {};
   for (const k of NUMERIC_KEYS) sum[k] = 0;
   for (const r of rows) for (const k of NUMERIC_KEYS) sum[k] += num(r[k]);
-  return computeRow(sum, week);
+  return computeRow(sum, week, branchOlMinPrtm);
 }
 
 /** Susun struktur header 3 baris dengan colspan/rowspan yang benar. */
