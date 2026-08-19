@@ -1,16 +1,3 @@
-/* =====================================================================
-   view.js — menyusun ulang tampilan Weekly Report dari data mentah.
-
-   Ada dua bentuk tabel tergantung filter:
-   - Tepat 1 bulan + 1 tahun dipilih -> tabel DETAIL, persis Excel
-     (kolom A sampai BX, per cabang & salesman).
-   - Lebih dari satu bulan/tahun (atau "semua") dipilih -> tabel TREN:
-     satu baris per periode, hanya 4 angka kunci per baris. Kolom A-BX
-     dipaksakan ke banyak bulan sekaligus akan jadi ratusan kolom dan
-     tidak terbaca, jadi bentuknya sengaja diringkas untuk melihat
-     perkembangan dari waktu ke waktu.
-   ===================================================================== */
-
 import { sb, requireSession, renderShell, showNote, escapeHtml, closeFilterDropdownsOnOutsideClick } from './app.js';
 import { COLUMNS, MONTHS, WEEKS, computeRow, aggregate, buildHeaderMatrix, fmt } from './schema.js';
 
@@ -51,7 +38,7 @@ const state = {
   months: new Set([new Date().getMonth() + 1]),
   week: Math.min(4, Math.ceil(new Date().getDate() / 7)),
   branchFilter: '',
-  areas: [], branches: [], salesmen: [], entries: [],
+  areas: [], branches: [], salesmen: [], entries: [], branchMonthly: [],
   isSingle: true,
   trendMetric: 'total_ol_prtm',
   expandedYears: new Set(),
@@ -178,9 +165,34 @@ async function load() {
   const { data, error } = await query;
   if (error) { showNote('note', 'Gagal memuat data: ' + error.message, 'err'); return; }
   state.entries = data ?? [];
+
+  // OL Min PRTM level cabang — dipakai untuk Balance PRTM di baris
+  // cabang/area/total (bukan di baris salesman perorangan). Ambil di
+  // rentang periode yang sama dengan mos_entries di atas.
+  let bmQuery = sb.from('branch_monthly').select('branch_id, period_year, period_month, ol_min_prtm');
+  if (state.isSingle) {
+    const [y] = state.years, [m] = state.months;
+    bmQuery = bmQuery.eq('period_year', y).eq('period_month', m);
+  } else {
+    const years = [...state.years];
+    const range = [];
+    for (let y = Math.min(...years) - 1; y <= Math.max(...years); y++) range.push(y);
+    bmQuery = bmQuery.in('period_year', range);
+  }
+  const { data: bm } = await bmQuery;
+  state.branchMonthly = bm ?? [];
+
   showNote('note', state.entries.length ? '' : 'Belum ada data untuk periode yang dipilih.', 'info');
   el.detailWrap.style.display = state.isSingle ? '' : 'none';
   draw();
+}
+
+/** Jumlah OL Min PRTM level cabang untuk sekumpulan cabang & satu periode
+    (dijumlah kalau lebih dari satu cabang, misal untuk baris area/nasional). */
+function branchOlMinPrtmFor(branchIds, year, month) {
+  return (state.branchMonthly ?? [])
+    .filter(r => r.period_year === year && r.period_month === month && branchIds.includes(r.branch_id))
+    .reduce((sum, r) => sum + (Number(r.ol_min_prtm) || 0), 0);
 }
 
 /* ---------- Mode DETAIL (satu periode) ---------------------------------- */
@@ -199,7 +211,7 @@ function buildDetailModel(year, month) {
   for (const b of branches) {
     const people = state.salesmen.filter(s => s.branch_id === b.id);
     const raws = people.map(s => byId.get(s.id) ?? {});
-    const agg = aggregate(raws, state.week);
+    const agg = aggregate(raws, state.week, branchOlMinPrtmFor([b.id], year, month));
     branchAgg.set(b.id, { branch: b, raws });
     no++;
 
@@ -207,22 +219,28 @@ function buildDetailModel(year, month) {
     if (el.detail.checked) {
       people.forEach(s => model.push({
         kind: 'sales', no: '', plant: '', name: s.name,
-        data: computeRow(byId.get(s.id) ?? {}, state.week),
+        data: computeRow(byId.get(s.id) ?? {}, state.week), // tanpa branchOlMinPrtm -> Balance PRTM kosong
       }));
     }
     model.push({ kind: 'spacer' });
   }
 
   const allRaws = [...branchAgg.values()].flatMap(x => x.raws);
-  model.push({ kind: 'total', no: 'TOTAL', plant: '', name: '', data: aggregate(allRaws, state.week) });
+  const allBranchIds = [...branchAgg.keys()];
+  model.push({ kind: 'total', no: 'TOTAL', plant: '', name: '',
+    data: aggregate(allRaws, state.week, branchOlMinPrtmFor(allBranchIds, year, month)) });
   model.push({ kind: 'spacer' });
 
   for (const a of state.areas) {
+    const areaBranchIds = [...branchAgg.values()]
+      .filter(x => x.branch.area_code === a.code).map(x => x.branch.id);
     const raws = [...branchAgg.values()]
       .filter(x => x.branch.area_code === a.code).flatMap(x => x.raws);
-    model.push({ kind: 'area', no: '', plant: '', name: a.name, data: aggregate(raws, state.week) });
+    model.push({ kind: 'area', no: '', plant: '', name: a.name,
+      data: aggregate(raws, state.week, branchOlMinPrtmFor(areaBranchIds, year, month)) });
   }
-  model.push({ kind: 'grand', no: '', plant: '', name: 'GRAND TOTAL', data: aggregate(allRaws, state.week) });
+  model.push({ kind: 'grand', no: '', plant: '', name: 'GRAND TOTAL',
+    data: aggregate(allRaws, state.week, branchOlMinPrtmFor(allBranchIds, year, month)) });
 
   return model;
 }
@@ -288,7 +306,10 @@ function aggFor(branchIds, year, month) {
   const salesmenIds = new Set(state.salesmen.filter(s => branchIds.includes(s.branch_id)).map(s => s.id));
   const raws = state.entries.filter(e =>
     e.period_year === year && (month ? e.period_month === month : true) && salesmenIds.has(e.salesman_id));
-  return aggregate(raws, state.week);
+  const olMin = (state.branchMonthly ?? [])
+    .filter(r => r.period_year === year && (month ? r.period_month === month : true) && branchIds.includes(r.branch_id))
+    .reduce((sum, r) => sum + (Number(r.ol_min_prtm) || 0), 0);
+  return aggregate(raws, state.week, olMin);
 }
 
 function pctBadge(curr, prev) {
@@ -431,6 +452,8 @@ function writeDataCell(ws, r, c, value, isText, negative) {
   const cell = ws.getCell(r, c);
   if (isText) {
     cell.value = value ?? '';
+  } else if (value === null || value === undefined) {
+    cell.value = null; // kosong, bukan 0 — konsisten dengan tampilan layar (mis. Balance PRTM per salesman)
   } else {
     cell.value = Number(value) || 0;
     cell.numFmt = NUMFMT;
